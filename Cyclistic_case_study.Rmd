@@ -1,0 +1,334 @@
+---
+title: "Cyclistic - Case study"
+author: "Nitin Reddy M"
+output: html_document
+date: "2024-04-5"
+---
+
+## Ask
+
+
+### About 
+
+Cyclistic launched a successful bike-share program in Chicago in 2016, boasting a fleet of nearly 6,000 bikes across 692 stations. They offer flexible pricing plans catering to casual riders and annual members, with the latter proving to be more profitable. Marketing efforts now focus on converting casual riders into annual members, leveraging their existing awareness of the program. Moreno's team aims to analyze historical bike trip data to identify trends and inform their conversion strategies.
+
+
+### Key stakeholders
+
+The key stakeholders for this project include:
+
+* __Lily Moreno:__ The director of marketing and your manager. Moreno is responsible for the development of campaigns and initiatives to promote the bike-share program. These may include email, social media, and other channels.
+* __Cyclistic marketing analytics team:__ A team of data analysts who are responsible for collecting, analyzing, and reporting data that helps guide Cyclistic marketing strategy.
+* __Cyclistic executive team:__ The notoriously detail-oriented executive team will decide whether to approve the recommended marketing program.
+
+
+### Guiding question
+
+This question will guide the future marketing program:
+
+* How do annual members and casual riders use Cyclistic bikes differently?
+
+
+### Business task
+
+> Conduct an analysis of bike ride data to extract insights distinguishing between the behaviors of casual riders and subscribed members. Identify trends gleaned from this analysis to inform Cyclistic's marketing strategy effectively.
+
+
+## Prepare
+
+### Data source
+
+We will be using Cyclistic's historical trip data to analyze and identify trends [Dataset](https://divvy-tripdata.s3.amazonaws.com/index.html). The
+data has been made available by Motivate International Inc. under this [license](https://divvybikes.com/data-license-agreement) 
+
+### Data Structure:
+
+The trip data is structured in comma-delimited (.CSV) format across 15 columns, encompassing ride ID number, ride type, start and end time, ride length (measured in minutes), day of the week, starting point details (code, name, latitude, and longitude), ending point details (code, name, latitude, and longitude), and rider type (member or casual).
+
+There are a total of 12 .csv files, each representing a month of the year 2023, containing this data.
+
+### Data Credibility:
+
+* The data is sourced directly from the Cyclistic database, ensuring its originality.
+* It encompasses all necessary information for thorough analysis, indicating its comprehensiveness.
+* Being from the year 2023, the data remains current and up-to-date.
+
+
+## Process
+
+### Why R and Tableau ?
+
+Using R for data analysis provides powerful statistical and data manipulation capabilities, making it ideal for processing and analyzing large datasets, such as bike ride data. R's extensive library ecosystem includes packages tailored for various analytical tasks, enabling in-depth exploration and visualization of the data.
+
+Tableau, on the other hand, excels in creating interactive and visually appealing dashboards and visualizations. It allows for easy exploration and presentation of insights derived from the data analyzed in R.
+
+### Importing data
+
+Install and load necessary packages and libraries:
+
+```{r, results='hide', message=FALSE}
+
+library(tidyverse)
+library(janitor)
+library(lubridate)
+library(dplyr)
+```
+
+Import the data sets
+
+```{r, results='hide', message=FALSE}
+df1 <- read_csv("202301-divvy-tripdata.csv")
+df2 <- read_csv("202302-divvy-tripdata.csv")
+df3 <- read_csv("202303-divvy-tripdata.csv")
+df4 <- read_csv("202304-divvy-tripdata.csv")
+df5 <- read_csv("202305-divvy-tripdata.csv")
+df6 <- read_csv("202306-divvy-tripdata.csv")
+df7 <- read_csv("202307-divvy-tripdata.csv")
+df8 <- read_csv("202308-divvy-tripdata.csv")
+df9 <- read_csv("202309-divvy-tripdata.csv")
+df10 <- read_csv("202310-divvy-tripdata.csv")
+df11 <- read_csv("202311-divvy-tripdata.csv")
+df12 <- read_csv("202312-divvy-tripdata.csv")
+```
+
+Check the structure of the data 
+
+```{r, results='hide'}
+str(df1)
+str(df2)
+str(df3)
+str(df4)
+str(df5)
+str(df6)
+str(df7)
+str(df8)
+str(df9)
+str(df10)
+str(df11)
+str(df12)
+```
+
+The column names in all the data frames are consistent.
+
+Stack the individual data frames into one big data frame and review the column names.
+
+```{r , echo=TRUE}
+rides <- rbind(df1,df2,df3,df4,df5,df6,df7,df8,df9,df10,df11,df12)
+colnames(rides)
+```
+Remove lat, long, fields as there are not required for the analysis.
+
+```{r}
+rides <- rides %>% select(-c(start_lat, start_lng, end_lat, end_lng))
+```
+
+Once again check the data and structure of the new data created
+
+```{r}
+head(rides)
+colnames(rides)
+str(rides)
+summary(rides)
+```
+
+### Data cleaning
+
+Things to consider:
+
+* The data can have missing values we have to delete the rows that doesnot have the data
+* The data can only be aggregated at the ride-level, which is too granular. We will want to add some additional columns of data -- such as day, month, day of week -- that provide additional opportunities to aggregate the data.
+* We will want to add a calculated field for length of ride since data did not have the "tripduration" column. We will add "ride_length" to the entire dataframe for consistency.
+* There can be some rides where tripduration can show up as negative, we have remove those rows.
+
+
+Converting the stated_at column to the default date format (yyyy-mm-dd)
+
+```{r results='hide'}
+rides$date <- as.Date(rides$started_at)
+```
+
+
+Creating month, day, day_of_week columns for further aggregation of data
+
+```{r results='hide'}
+rides$month <- format(as.Date(rides$date),"%m")
+rides$day <- format(as.Date(rides$date),"%d")
+rides$day_of_week <- format(as.Date(rides$date),"%A")
+```
+
+
+Create another column that gives the duration of ride in minutes. Convert it to the numeric data type for analysis.
+
+```{r}
+rides$ride_length <- difftime(rides$ended_at,rides$started_at, units= "mins")
+
+rides$ride_length <- as.numeric(as.character(rides$ride_length))
+
+is.numeric(rides$ride_length)
+```
+
+
+Remove bad data
+
+* Removing null values
+* Removing rides with negative ride length
+
+```{r}
+dim(rides)
+rides <- na.omit(rides)
+rides <- na.omit(rides[!(rides$ride_length<0),])
+```
+
+
+Remove duplicated ID (confirmed different ride_id is assigned for every rides even if same rider uses this service). Take the updated data into new data frame rides_v2, check the new data frame created.
+
+```{r}
+rides_v2 <- rides[!duplicated(rides$ride_id),]
+dim(rides_v2)
+summary(rides_v2)
+```
+
+
+We are done with the data cleaning process.
+
+## Analyze
+
+Statistical summary of trip_duration for all customer types, casual and member:
+```{r}
+summary(rides_v2$ride_length)
+```
+
+
+Analyzing ride length for both casual and member riders on each day of the week.
+
+First order the day_of_week and find the mean ride_length with day_of_week
+
+```{r}
+rides_v2$day_of_week <- ordered(rides_v2$day_of_week, levels=c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"))
+
+rides_v2 %>%
+	aggregate(ride_length ~ member_casual + day_of_week, FUN = mean)
+```
+
+
+Analyzing ride length for both casual and member riders across each month of the year.
+
+```{r}
+rides_v2 %>%
+	aggregate(ride_length ~ member_casual + month, FUN = mean)
+```
+
+__Findings:__
+
+* Casual riders exhibit longer trip durations compared to members.
+* Members maintain consistent ride lengths throughout the week, whereas casual riders experience peaks during weekends.
+* Notably, ride lengths for casual riders show a significant increase from May to July, coinciding with the summer months.
+
+
+Analyzing the number of rides taken for each day of the week.
+
+```{r}
+rides_v2 %>%
+	group_by(member_casual, day_of_week) %>% 
+		summarize(number_of_rides = n()) %>%
+			arrange(day_of_week)
+```
+
+
+Analyzing number of rides taken for each month
+
+```{r}
+rides_v2 %>%
+	group_by(member_casual, month) %>% 
+		summarize(number_of_rides = n()) %>%
+			arrange(month)
+```
+
+__Findings:__
+
+* Members take a notably higher number of rides compared to casual riders.
+* Casual riders demonstrate a peak in ride frequency during weekends, while members exhibit maximum ride counts on weekdays.
+* The number of rides for both casual and member riders reaches its peak during the summer months.
+
+
+Export the dataset into a format suitable for visualization using Tableau.
+
+Create a table that aggregates data by member_casual, weekday, and month, displaying the mean ride_length and total number of rides taken for each group.
+
+```{r}
+visualize_rides <- rides_v2 %>% 
+  mutate(weekday = wday(started_at, label = TRUE), month = month(started_at, label = TRUE)) %>% 
+  group_by(member_casual, weekday, month) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(ride_length)) %>%
+  arrange(member_casual, weekday)	
+
+visualize_rides
+
+write.csv(visualize_rides, file = 'C:/Users/nitin/Desktop/Visualize_rides.csv')
+```
+
+	
+## Share
+
+Here, I would like to share visualizations which would allow executives to understand my conclusion easily.
+<br />
+visualization comparing the number of rides taken by members versus casual riders
+<br />
+![Casual rides vs Member rides](C:/Viz/Casual_vs_member.png)
+
+<br />
+Distribution of rides taken across days of the week and months, offering clear insights into ride frequency patterns over time.
+<br />
+
+![Number of rides - Weekdays](C:/Viz/NoR_vs_weekday.png)
+
+<br />
+![Number of rides - Month](C:/Viz/NoR_vs_month.png)
+<br />
+
+Distribution of ride lengths for both casual and member riders on each day of the week, as well as across each month.
+<br />
+
+![Average duration vs weekday](C:/Viz/AvdD_vs_weekday.png)
+
+<br />
+![Average Duration - Month](C:/Viz/AvgD_vs_month.png)
+<br />
+<br />
+
+#### Analysis:
+
+1. **Ride Frequency**: 
+   - Members take significantly more rides compared to casual riders.
+   - Maximum ride frequency for casual riders occurs during weekends, while for members, it peaks on weekdays.
+
+2. **Seasonal Trends**: 
+   - The number of rides peaks during summer for both casual and member riders, indicating higher demand during warmer months.
+
+3. **Trip Duration**: 
+   - Casual riders have longer trip durations on average compared to members.
+   - Ride length for members remains relatively consistent throughout the week, whereas casual riders experience a peak during weekends.
+
+4. **Seasonal Variation in Ride Length**:
+   - Ride length significantly increases for casual riders from May to July, correlating with the summer months. Members' ride length may not exhibit as pronounced a seasonal variation.
+
+
+#### Conclusion:
+
+1. **Marketing Strategy**: 
+   - Tailor marketing efforts to capitalize on the higher ride frequency of members, possibly through loyalty programs or incentives.
+   - Weekend promotions could attract more casual riders, aligning with their peak ride frequency during weekends.
+
+2. **Seasonal Campaigns**:
+   - Develop seasonal marketing campaigns, especially during summer when ride demand is at its peak for both rider types.
+   - Highlight the benefits of biking during summer months, such as leisurely rides or outdoor activities.
+
+3. **Service Improvement**:
+   - Consider enhancing services during peak periods, such as weekends for casual riders, to ensure a positive user experience.
+   - For casual riders experiencing longer ride durations, offer amenities or incentives to make their trips more comfortable or enjoyable.
+
+4. **Membership Conversion**:
+   - Encourage casual riders to become members by highlighting the convenience and benefits of membership, potentially offering trial memberships or discounts during peak riding seasons.
+
+
